@@ -31,11 +31,6 @@ const OPERATORS = [
   { label: "EnQuest", value: "ENQUEST PLC" },
   { label: "Serica Energy", value: "SERICA ENERGY" },
   { label: "Ithaca Energy", value: "ITHACA ENERGY" },
-  { label: "Tullow", value: "TULLOW UK" },
-  { label: "Afentra", value: "ADURA ENERGY" },
-  { label: "Gulf Keystone", value: "GULF KEYSTONE" },
-  { label: "Kistos", value: "KISTOS" },
-  { label: "Jersey Oil & Gas", value: "JERSEY OIL AND GAS" },
 ];
 
 const METRICS: { key: keyof ProductionRow; label: string; color: string }[] = [
