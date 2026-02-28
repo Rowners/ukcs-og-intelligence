@@ -269,7 +269,7 @@ def run(tickers: list[str] | None = None, year: int | None = None, model: str = 
     import time
 
     companies = WATCHLIST
-    if tickers:
+    if tickers is not None:
         tickers_upper = {t.upper() for t in tickers}
         companies = [c for c in WATCHLIST if c["ticker"] in tickers_upper]
 
