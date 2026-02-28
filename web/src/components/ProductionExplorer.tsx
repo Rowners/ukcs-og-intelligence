@@ -69,7 +69,7 @@ export default function ProductionExplorer() {
 
   // Distinct fields for current operator
   const fields = useMemo(() => {
-    const names = [...new Set(rows.map((r) => r.FIELDNAME))].sort();
+    const names = Array.from(new Set(rows.map((r) => r.FIELDNAME))).sort();
     return names;
   }, [rows]);
 
