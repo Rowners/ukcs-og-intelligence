@@ -13,7 +13,7 @@ from datetime import date, datetime
 import requests
 from bs4 import BeautifulSoup
 
-from src.databricks.client import upsert_news
+from src.databricks.client import upsert_news, query
 
 logger = logging.getLogger(__name__)
 
@@ -110,6 +110,13 @@ def run(tickers: list[str] | None = None, max_per_company: int = 20) -> int:
         tickers_upper = {t.upper() for t in tickers}
         companies = [c for c in WATCHLIST if c["ticker"] in tickers_upper]
 
+    # Load all known URLs upfront to avoid redundant HTTP fetches
+    try:
+        existing_rows = query("SELECT url FROM rns_announcements_raw")
+        known_urls = {r["url"] for r in existing_rows}
+    except Exception:
+        known_urls = set()
+
     all_records = []
 
     for company in companies:
@@ -120,7 +127,11 @@ def run(tickers: list[str] | None = None, max_per_company: int = 20) -> int:
         listings = _fetch_listing(ticker)
         listings = listings[:max_per_company]
 
-        for item in listings:
+        new_listings = [item for item in listings if item["url"] not in known_urls]
+        logger.info("  %d new announcements to fetch for %s (skipping %d already stored)",
+                    len(new_listings), ticker, len(listings) - len(new_listings))
+
+        for item in new_listings:
             time.sleep(REQUEST_DELAY)
             item["content"] = _fetch_content(item["url"])
             item["ticker"] = ticker
@@ -128,7 +139,7 @@ def run(tickers: list[str] | None = None, max_per_company: int = 20) -> int:
             all_records.append(item)
             logger.debug("  fetched: %s", item["title"][:80])
 
-        logger.info("  %d announcements fetched for %s", len(listings), ticker)
+        logger.info("  %d announcements fetched for %s", len(new_listings), ticker)
 
     count = upsert_news(all_records, "rns_announcements_raw")
     logger.info("Upserted %d RNS announcements total", count)
