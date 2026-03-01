@@ -1,6 +1,18 @@
 import { NextRequest, NextResponse } from "next/server";
 import yahooFinance from "yahoo-finance2";
 
+interface YFRow {
+  date: Date;
+  close: number | null;
+}
+
+// yahoo-finance2 v3 overloads don't resolve cleanly with interval — cast to bypass
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const yfHistorical = yahooFinance.historical as (
+  symbol: string,
+  opts: { period1: Date; period2: Date; interval: string }
+) => Promise<YFRow[]>;
+
 const OPERATOR_YF: Record<string, string> = {
   "HARBOUR ENERGY PLC": "HBR.L",
   "ENQUEST PLC":        "ENQ.L",
@@ -34,9 +46,9 @@ export async function GET(req: NextRequest) {
     const opts = { period1: start, period2: end, interval: "1wk" as const };
 
     const [shareQuotes, brentQuotes, gasQuotes] = await Promise.all([
-      yahooFinance.historical(yf_symbol,   opts),
-      yahooFinance.historical(BRENT_TICKER, opts),
-      yahooFinance.historical(GAS_TICKER,   opts),
+      yfHistorical(yf_symbol,   opts),
+      yfHistorical(BRENT_TICKER, opts),
+      yfHistorical(GAS_TICKER,   opts),
     ]);
 
     // Build date-keyed maps for commodity prices
