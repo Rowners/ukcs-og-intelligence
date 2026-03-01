@@ -34,9 +34,9 @@ const OPERATORS = [
 ];
 
 const PROD_METRICS: { key: keyof ProductionRow; label: string; color: string }[] = [
-  { key: "OILPRODMBD", label: "Oil (Mbbl)", color: "#00EDED" },
-  { key: "AGASPROMMS", label: "Gas-Assoc (MMscf)", color: "#A2F3F3" },
-  { key: "DGASPROMMS", label: "Gas-Disassoc (MMscf)", color: "#7dd3fc" },
+  { key: "OILPRODMBD", label: "Oil (Mbbl)", color: "#22d3ee" },
+  { key: "AGASPROMMS", label: "Associated Gas (MMscf)", color: "#6ee7b7" },
+  { key: "DGASPROMMS", label: "Gas (MMscf)", color: "#a78bfa" },
 ];
 
 const ALL_METRIC_KEYS: (keyof ProductionRow)[] = [
@@ -278,7 +278,7 @@ export default function ProductionExplorer() {
           <table className="w-full text-xs text-[#A2F3F3]">
             <thead className="bg-[#003059] text-[#00EDED] uppercase tracking-wider">
               <tr>
-                {["Field", "Yr", "Mo", "Oil (Mbbl)", "Gas-A (MMscf)", "Gas-D (MMscf)", "Cond (Mbbl)", "Water Cut %"].map(
+                {["Field", "Yr", "Mo", "Oil (Mbbl)", "Assoc Gas (MMscf)", "Gas (MMscf)", "Cond (Mbbl)", "Water Cut %"].map(
                   (h) => (
                     <th key={h} className="px-3 py-2.5 text-left font-medium whitespace-nowrap">
                       {h}

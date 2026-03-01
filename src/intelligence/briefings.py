@@ -88,8 +88,8 @@ def _format_production(rows: list[dict]) -> str:
         return "(No production data found for this operator)"
 
     lines = [
-        f"{'Field':<30} {'Yr':>4} {'Mo':>2} {'Oil(Mbbl)':>10} {'Gas-A(MMscf)':>12} "
-        f"{'Gas-D(MMscf)':>12} {'Cond(Mbbl)':>10} {'Water(Mbbl)':>11} {'WatCut%':>8}"
+        f"{'Field':<30} {'Yr':>4} {'Mo':>2} {'Oil(Mbbl)':>10} {'AssocGas(MMscf)':>15} "
+        f"{'Gas(MMscf)':>10} {'Cond(Mbbl)':>10} {'Water(Mbbl)':>11} {'WatCut%':>8}"
     ]
     lines.append("-" * 105)
 
