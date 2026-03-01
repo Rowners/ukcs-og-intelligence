@@ -12,31 +12,40 @@ interface Briefing {
   model: string;
 }
 
-async function getBriefings(): Promise<Briefing[]> {
+async function getLatestBriefings(): Promise<Briefing[]> {
   try {
+    // One row per ticker — the most recently generated briefing
     return await dbQuery<Briefing>(`
       SELECT ticker, company_name, year, briefing, generated_at, model
-      FROM company_briefings
-      ORDER BY year DESC, ticker ASC
+      FROM (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY generated_at DESC) AS rn
+        FROM company_briefings
+      ) t
+      WHERE rn = 1
+      ORDER BY ticker ASC
     `);
   } catch {
     return [];
   }
 }
 
+function formatDate(ts: string): string {
+  return new Date(ts).toLocaleDateString("en-GB", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
 export default async function DigestPage() {
-  const briefings = await getBriefings();
+  const briefings = await getLatestBriefings();
 
-  // Group by year, show latest year first
-  const byYear = briefings.reduce<Record<number, Briefing[]>>((acc, b) => {
-    acc[b.year] = acc[b.year] ?? [];
-    acc[b.year].push(b);
-    return acc;
-  }, {});
-
-  const years = Object.keys(byYear)
-    .map(Number)
-    .sort((a, b) => b - a);
+  const latestUpdate = briefings.length > 0
+    ? briefings.reduce((latest, b) =>
+        b.generated_at > latest ? b.generated_at : latest,
+        briefings[0].generated_at
+      )
+    : null;
 
   if (briefings.length === 0) {
     return (
@@ -54,22 +63,21 @@ export default async function DigestPage() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-[#00EDED]">Weekly Intelligence Digest</h1>
         <p className="text-[#A2F3F3]/70 text-sm mt-1">
-          AI-generated briefings for UKCS-listed operators — production, corporate developments, regulatory context, and commercial outlook.
+          AI-generated briefings for UKCS-listed operators — production, corporate developments,
+          regulatory context, and commercial outlook.
         </p>
+        {latestUpdate && (
+          <p className="text-[#A2F3F3]/40 text-xs mt-2">
+            Last updated: {formatDate(latestUpdate)}
+          </p>
+        )}
       </div>
 
-      {years.map((year) => (
-        <section key={year} className="mb-12">
-          <h2 className="text-lg font-medium text-[#A2F3F3] mb-4 border-b border-[#00EDED]/20 pb-2">
-            {year}
-          </h2>
-          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {byYear[year].map((b) => (
-              <BriefingCard key={b.ticker} briefing={b} />
-            ))}
-          </div>
-        </section>
-      ))}
+      <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+        {briefings.map((b) => (
+          <BriefingCard key={b.ticker} briefing={b} />
+        ))}
+      </div>
     </div>
   );
 }
