@@ -9,7 +9,7 @@ An end-to-end data pipeline and intelligence platform for the UK Continental She
 - **Tracks** Brent crude prices and LSE share prices daily via yfinance
 - **Generates** structured GPT-4o analyst briefings covering production performance, corporate developments, regulatory context, and commercial outlook
 - **Stores** everything in Databricks Delta tables
-- **Serves** briefings and an interactive production explorer through a Next.js web app
+- **Serves** briefings, an interactive production explorer, and a live price analysis dashboard through a Next.js web app
 
 ## Watchlist companies
 
@@ -34,10 +34,33 @@ yfinance
 
 GPT-4o briefing generator   → company_briefings          (Delta)
 
+Yahoo Finance v8 API (live) → Price Analysis charts (no Databricks)
+
 Next.js web app
-  ├── /digest    — AI briefing cards per company
-  └── /explorer  — interactive production data chart + table
+  ├── /digest          — AI briefing cards (latest per company)
+  ├── /explorer        — interactive production data chart + table
+  └── /price-analysis  — live share price vs Brent vs TTF gas charts
 ```
+
+## Web app pages
+
+### Weekly Intelligence Digest (`/digest`)
+AI-generated briefings for each watchlist company covering production performance, corporate developments, regulatory context, and commercial outlook. Shows only the most recently generated briefing per company, with a "Last updated" date. Older briefings are retained in the database but not displayed.
+
+### Data Explorer (`/explorer`)
+Interactive production data viewer backed by Databricks. Features:
+- Filter by operator, field, and year
+- **Production volumes panel** — Oil (cyan), Associated Gas (green), Gas (purple) as separate line series
+- **Water cut panel** — shown separately below the production chart, synced crosshair via `syncId`; displays average water cut across selected fields
+- Sortable data table below the charts
+
+### Price Analysis (`/price-analysis`)
+Live market data fetched directly from Yahoo Finance's v8 chart API at request time (no Databricks). Three stacked, synced panels:
+- **Share price** — in GBp (LSE tickers: HBR.L, ENQ.L, SQZ.L, ITH.L)
+- **Brent Crude** — ICE Last Day Financial Futures (`BZ=F`), USD/bbl
+- **TTF Natural Gas** — Dutch TTF Calendar Futures (`TTF=F`), EUR/MWh
+
+All three panels share a hover crosshair. Y-axes auto-scale to the data range. Selector for 1Y / 2Y / 3Y periods.
 
 ## Project structure
 
@@ -59,10 +82,15 @@ ukoandganalysis/
 │       ├── app/
 │       │   ├── digest/         # Briefings page
 │       │   ├── explorer/       # Production data explorer
-│       │   └── api/            # Server-side API routes
+│       │   ├── price-analysis/ # Live price charts page
+│       │   └── api/
+│       │       ├── briefings/  # Databricks briefings endpoint
+│       │       ├── production/ # Databricks production endpoint
+│       │       └── prices/     # Yahoo Finance proxy endpoint
 │       ├── components/
 │       │   ├── BriefingCard.tsx
 │       │   ├── ProductionExplorer.tsx
+│       │   ├── PriceAnalysis.tsx
 │       │   └── Nav.tsx
 │       └── lib/
 │           └── databricks.ts   # Server-side Databricks client
@@ -166,15 +194,17 @@ python -m src.intelligence.briefings --tickers ENQ SQZ --delay 15
 
 | Table | Key | Description |
 |-------|-----|-------------|
-| `nsta_field_production_raw` | FIELDNAME + PERIODYR + PERIODMNTH | Monthly OHLCV production per field |
+| `nsta_field_production_raw` | FIELDNAME + PERIODYR + PERIODMNTH | Monthly production per field (oil Mbbl, gas MMscf, water m³, condensate Mbbl) |
 | `nsta_news_raw` | url | NSTA regulatory news articles |
 | `rns_announcements_raw` | url | Investegate RNS announcements |
 | `brent_crude_prices` | date | Daily OHLCV for ICE Brent (USD/bbl) |
 | `company_share_prices` | ticker + date | Daily OHLCV for watchlist companies (GBp) |
-| `company_briefings` | ticker + year | GPT-4o generated analyst briefings |
+| `company_briefings` | ticker + year | GPT-4o generated analyst briefings (all versions retained; UI shows latest per ticker) |
 
 ## Notes
 
 - **Databricks Free Edition**: The SQL warehouse auto-pauses after inactivity. Start it manually before running scripts or allow a 2–5 minute cold-start delay on first connection.
 - **OpenAI rate limits**: Free-tier accounts have a 30,000 TPM limit. The briefing generator defaults to a 30-second delay between companies. Use `--delay` to adjust.
 - **NSTA production data**: The ArcGIS API returns multiple sub-unit rows per field per period. These are aggregated (summed) before upsert so each FIELDNAME + PERIODYR + PERIODMNTH combination is unique.
+- **Price Analysis**: Live data is fetched server-side from Yahoo Finance's v8 chart API with a browser-like User-Agent. No API key required. Data is not cached — each page load makes fresh requests.
+- **Water cut**: Reported as a percentage average across all selected fields. WATPRODVOL (m³) is converted to Mbbl (× 0.0062898) before computing water cut = water / (water + oil).
