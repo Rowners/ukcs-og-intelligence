@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
 import yahooFinance from "yahoo-finance2";
 
+// Suppress yahoo-finance2 validation notices that would otherwise throw
+yahooFinance.setGlobalConfig({ validation: { logErrors: false } });
+
 interface YFRow {
   date: Date;
   close: number | null;
@@ -10,7 +13,9 @@ interface YFRow {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const yfHistorical = yahooFinance.historical as (
   symbol: string,
-  opts: { period1: Date; period2: Date; interval: string }
+  opts: { period1: Date; period2: Date; interval: string },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  moduleOpts?: any
 ) => Promise<YFRow[]>;
 
 const OPERATOR_YF: Record<string, string> = {
@@ -28,6 +33,16 @@ function dateKey(d: Date): string {
   return d.toISOString().slice(0, 10);
 }
 
+/** Fetch one ticker, returning [] on failure rather than throwing. */
+async function safeFetch(symbol: string, period1: Date, period2: Date): Promise<YFRow[]> {
+  try {
+    return await yfHistorical(symbol, { period1, period2, interval: "1wk" }, { validateResult: false });
+  } catch (e) {
+    console.warn(`yfHistorical failed for ${symbol}:`, e);
+    return [];
+  }
+}
+
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const operator = searchParams.get("operator") || "HARBOUR ENERGY PLC";
@@ -43,12 +58,10 @@ export async function GET(req: NextRequest) {
   start.setDate(start.getDate() - days);
 
   try {
-    const opts = { period1: start, period2: end, interval: "1wk" as const };
-
     const [shareQuotes, brentQuotes, gasQuotes] = await Promise.all([
-      yfHistorical(yf_symbol,   opts),
-      yfHistorical(BRENT_TICKER, opts),
-      yfHistorical(GAS_TICKER,   opts),
+      safeFetch(yf_symbol,   start, end),
+      safeFetch(BRENT_TICKER, start, end),
+      safeFetch(GAS_TICKER,   start, end),
     ]);
 
     // Build date-keyed maps for commodity prices
@@ -60,6 +73,10 @@ export async function GET(req: NextRequest) {
     }
     for (const q of gasQuotes) {
       if (q.date && q.close != null) gasMap[dateKey(q.date)] = q.close;
+    }
+
+    if (shareQuotes.length === 0) {
+      return NextResponse.json({ error: `No data returned for ${yf_symbol}` }, { status: 502 });
     }
 
     // Align all series to share price dates
@@ -88,7 +105,8 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json(indexed);
   } catch (err) {
-    console.error("Prices API error:", err);
-    return NextResponse.json({ error: "Failed to load price data" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("Prices API error:", msg);
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }
