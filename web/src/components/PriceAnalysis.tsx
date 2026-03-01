@@ -8,17 +8,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
-  ReferenceLine,
   ResponsiveContainer,
 } from "recharts";
 
-interface PricePoint {
-  date: string;
-  share: number | null;
-  brent: number | null;
-  gas: number | null;
-}
+interface Series { date: string; value: number }
+interface PriceData { share: Series[]; brent: Series[]; gas: Series[] }
 
 const OPERATORS = [
   { label: "Harbour Energy", value: "HARBOUR ENERGY PLC", ticker: "HBR" },
@@ -41,17 +35,19 @@ const TOOLTIP_STYLE = {
   fontSize: 12,
 };
 
+const SYNC_ID = "price-sync";
+
 export default function PriceAnalysis() {
   const [operator, setOperator] = useState(OPERATORS[0].value);
   const [days, setDays]         = useState(365);
-  const [data, setData]         = useState<PricePoint[]>([]);
+  const [data, setData]         = useState<PriceData | null>(null);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState<string | null>(null);
 
   useEffect(() => {
     setLoading(true);
     setError(null);
-    setData([]);
+    setData(null);
     fetch(`/api/prices?operator=${encodeURIComponent(operator)}&days=${days}`)
       .then(r => r.json())
       .then(d => {
@@ -63,12 +59,6 @@ export default function PriceAnalysis() {
   }, [operator, days]);
 
   const selectedOp = OPERATORS.find(o => o.value === operator)!;
-
-  const formatTip = (value: number) => {
-    const delta = value - 100;
-    const sign  = delta >= 0 ? "+" : "";
-    return `${value.toFixed(1)}  (${sign}${delta.toFixed(1)}%)`;
-  };
 
   return (
     <div className="space-y-6">
@@ -116,76 +106,71 @@ export default function PriceAnalysis() {
       {loading && <p className="text-[#A2F3F3]/50 text-sm">Loading price data...</p>}
       {error   && <p className="text-red-400 text-sm">{error}</p>}
 
-      {!loading && !error && data.length > 0 && (
-        <div className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15">
-          <div className="flex justify-between items-center mb-4">
+      {!loading && !error && data && (
+        <div className="space-y-3">
+
+          {/* Share price */}
+          <div className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15">
             <span className="text-[10px] text-[#A2F3F3]/50 uppercase tracking-widest">
-              Price Performance
+              {selectedOp.label} ({selectedOp.ticker}) — GBp
             </span>
-            <span className="text-[9px] text-[#A2F3F3]/30">
-              All series indexed to 100 at period start
-            </span>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={data.share} syncId={SYNC_ID} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
+                <XAxis dataKey="date" tick={false} tickLine={false} height={4} />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  formatter={(v: number) => [`${v.toFixed(1)} GBp`, selectedOp.label]}
+                />
+                <Line type="monotone" dataKey="value" stroke="#22d3ee" strokeWidth={2} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
 
-          <ResponsiveContainer width="100%" height={340}>
-            <LineChart data={data} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
-              <XAxis
-                dataKey="date"
-                tick={{ fill: "#A2F3F3", fontSize: 11 }}
-                tickLine={false}
-                interval="preserveStartEnd"
-              />
-              <YAxis
-                tick={{ fill: "#A2F3F3", fontSize: 11 }}
-                tickLine={false}
-                axisLine={false}
-              />
-              <ReferenceLine
-                y={100}
-                stroke="rgba(255,255,255,0.18)"
-                strokeDasharray="4 3"
-              />
-              <Tooltip
-                contentStyle={TOOLTIP_STYLE}
-                formatter={(value: number, name: string) => [formatTip(value), name]}
-              />
-              <Legend wrapperStyle={{ color: "#A2F3F3", fontSize: 12 }} />
+          {/* Brent crude */}
+          <div className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15">
+            <span className="text-[10px] text-[#A2F3F3]/50 uppercase tracking-widest">
+              Brent Crude (ICE BZ=F) — USD/bbl
+            </span>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={data.brent} syncId={SYNC_ID} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
+                <XAxis dataKey="date" tick={false} tickLine={false} height={4} />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  formatter={(v: number) => [`$${v.toFixed(2)}/bbl`, "Brent Crude"]}
+                />
+                <Line type="monotone" dataKey="value" stroke="#fb923c" strokeWidth={1.5} dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
 
-              <Line
-                type="monotone"
-                dataKey="share"
-                name={`${selectedOp.label} (${selectedOp.ticker})`}
-                stroke="#22d3ee"
-                strokeWidth={2}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="brent"
-                name="Brent Crude (USD/bbl)"
-                stroke="#fb923c"
-                strokeWidth={1.5}
-                dot={false}
-                connectNulls
-              />
-              <Line
-                type="monotone"
-                dataKey="gas"
-                name="Gas (TTF, EUR/MWh)"
-                stroke="#6ee7b7"
-                strokeWidth={1.5}
-                strokeDasharray="5 3"
-                dot={false}
-                connectNulls
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {/* TTF gas */}
+          <div className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15">
+            <span className="text-[10px] text-[#A2F3F3]/50 uppercase tracking-widest">
+              TTF Natural Gas (Dutch TTF=F) — EUR/MWh
+            </span>
+            <ResponsiveContainer width="100%" height={160}>
+              <LineChart data={data.gas} syncId={SYNC_ID} margin={{ top: 8, right: 16, left: 0, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
+                <XAxis
+                  dataKey="date"
+                  tick={{ fill: "#A2F3F3", fontSize: 10 }}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <Tooltip
+                  contentStyle={TOOLTIP_STYLE}
+                  formatter={(v: number) => [`€${v.toFixed(2)}/MWh`, "TTF Gas"]}
+                />
+                <Line type="monotone" dataKey="value" stroke="#6ee7b7" strokeWidth={1.5} strokeDasharray="5 3" dot={false} connectNulls />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
 
-          <p className="text-[9px] text-[#A2F3F3]/25 text-right mt-2">
-            Share price in GBp · Brent: ICE BZ=F · Gas: Dutch TTF (TTF=F)
-          </p>
         </div>
       )}
     </div>
