@@ -1,19 +1,4 @@
 import { NextRequest, NextResponse } from "next/server";
-import yahooFinance from "yahoo-finance2";
-
-interface YFRow {
-  date: Date;
-  close: number | null;
-}
-
-// yahoo-finance2 v3 overloads don't resolve cleanly with interval — cast to bypass
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const yfHistorical = yahooFinance.historical as (
-  symbol: string,
-  opts: { period1: Date; period2: Date; interval: string },
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  moduleOpts?: any
-) => Promise<YFRow[]>;
 
 const OPERATOR_YF: Record<string, string> = {
   "HARBOUR ENERGY PLC": "HBR.L",
@@ -22,21 +7,54 @@ const OPERATOR_YF: Record<string, string> = {
   "ITHACA ENERGY":      "ITH.L",
 };
 
-// TTF Natural Gas Futures (Dutch Title Transfer Facility) — European gas benchmark
 const GAS_TICKER   = "TTF=F";
 const BRENT_TICKER = "BZ=F";
+const YF_BASE      = "https://query1.finance.yahoo.com/v8/finance/chart";
 
-function dateKey(d: Date): string {
-  return d.toISOString().slice(0, 10);
+// Mimic a real browser request to avoid Yahoo Finance server-side blocks
+const YF_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
+  "Accept": "application/json, text/plain, */*",
+  "Accept-Language": "en-US,en;q=0.9",
+  "Origin": "https://finance.yahoo.com",
+  "Referer": "https://finance.yahoo.com/",
+};
+
+function dateKey(ts: number): string {
+  return new Date(ts * 1000).toISOString().slice(0, 10);
 }
 
-/** Fetch one ticker, returning [] on failure rather than throwing. */
-async function safeFetch(symbol: string, period1: Date, period2: Date): Promise<YFRow[]> {
+async function fetchChart(
+  symbol: string,
+  start: number,
+  end: number
+): Promise<Map<string, number>> {
+  const url = `${YF_BASE}/${encodeURIComponent(symbol)}?interval=1wk&period1=${start}&period2=${end}`;
   try {
-    return await yfHistorical(symbol, { period1, period2, interval: "1wk" }, { validateResult: false });
+    const res = await fetch(url, { headers: YF_HEADERS });
+    if (!res.ok) {
+      console.warn(`YF ${symbol}: HTTP ${res.status} ${res.statusText}`);
+      return new Map();
+    }
+    const json = await res.json();
+    const result = json?.chart?.result?.[0];
+    if (!result) {
+      const err = json?.chart?.error;
+      console.warn(`YF ${symbol}: no result. Error:`, JSON.stringify(err));
+      return new Map();
+    }
+    const timestamps: number[]      = result.timestamp ?? [];
+    const closes: (number | null)[] = result.indicators?.quote?.[0]?.close ?? [];
+    const map = new Map<string, number>();
+    timestamps.forEach((ts, i) => {
+      const c = closes[i];
+      if (c != null) map.set(dateKey(ts), c);
+    });
+    return map;
   } catch (e) {
-    console.warn(`yfHistorical failed for ${symbol}:`, e);
-    return [];
+    console.warn(`YF ${symbol} fetch error:`, e);
+    return new Map();
   }
 }
 
@@ -50,60 +68,42 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "Unknown operator" }, { status: 400 });
   }
 
-  const end   = new Date();
-  const start = new Date(end);
-  start.setDate(start.getDate() - days);
+  const end   = Math.floor(Date.now() / 1000);
+  const start = Math.floor(end - days * 86400);
 
-  try {
-    const [shareQuotes, brentQuotes, gasQuotes] = await Promise.all([
-      safeFetch(yf_symbol,   start, end),
-      safeFetch(BRENT_TICKER, start, end),
-      safeFetch(GAS_TICKER,   start, end),
-    ]);
+  const [shareMap, brentMap, gasMap] = await Promise.all([
+    fetchChart(yf_symbol,    start, end),
+    fetchChart(BRENT_TICKER, start, end),
+    fetchChart(GAS_TICKER,   start, end),
+  ]);
 
-    // Build date-keyed maps for commodity prices
-    const brentMap: Record<string, number> = {};
-    const gasMap:   Record<string, number> = {};
-
-    for (const q of brentQuotes) {
-      if (q.date && q.close != null) brentMap[dateKey(q.date)] = q.close;
-    }
-    for (const q of gasQuotes) {
-      if (q.date && q.close != null) gasMap[dateKey(q.date)] = q.close;
-    }
-
-    if (shareQuotes.length === 0) {
-      return NextResponse.json({ error: `No data returned for ${yf_symbol}` }, { status: 502 });
-    }
-
-    // Align all series to share price dates
-    const raw = shareQuotes
-      .filter(q => q.date && q.close != null)
-      .map(q => ({
-        date:  dateKey(q.date),
-        share: q.close as number,
-        brent: brentMap[dateKey(q.date)] ?? null,
-        gas:   gasMap[dateKey(q.date)]   ?? null,
-      }));
-
-    if (raw.length === 0) return NextResponse.json([]);
-
-    // Normalise all series to 100 at first valid point
-    const firstShare = raw[0].share;
-    const firstBrent = raw.find(p => p.brent != null)?.brent ?? 1;
-    const firstGas   = raw.find(p => p.gas   != null)?.gas   ?? 1;
-
-    const indexed = raw.map(p => ({
-      date:  p.date,
-      share: parseFloat(((p.share / firstShare) * 100).toFixed(1)),
-      brent: p.brent != null ? parseFloat(((p.brent / firstBrent) * 100).toFixed(1)) : null,
-      gas:   p.gas   != null ? parseFloat(((p.gas   / firstGas)   * 100).toFixed(1)) : null,
-    }));
-
-    return NextResponse.json(indexed);
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.error("Prices API error:", msg);
-    return NextResponse.json({ error: msg }, { status: 500 });
+  if (shareMap.size === 0) {
+    return NextResponse.json({ error: `No data for ${yf_symbol}` }, { status: 502 });
   }
+
+  const raw: { date: string; share: number; brent: number | null; gas: number | null }[] = [];
+  for (const [date, share] of Array.from(shareMap.entries())) {
+    raw.push({
+      date,
+      share,
+      brent: brentMap.get(date) ?? null,
+      gas:   gasMap.get(date)   ?? null,
+    });
+  }
+  raw.sort((a, b) => a.date.localeCompare(b.date));
+
+  if (raw.length === 0) return NextResponse.json([]);
+
+  const firstShare = raw[0].share;
+  const firstBrent = raw.find(p => p.brent != null)?.brent ?? 1;
+  const firstGas   = raw.find(p => p.gas   != null)?.gas   ?? 1;
+
+  const indexed = raw.map(p => ({
+    date:  p.date,
+    share: parseFloat(((p.share  / firstShare) * 100).toFixed(1)),
+    brent: p.brent != null ? parseFloat(((p.brent / firstBrent) * 100).toFixed(1)) : null,
+    gas:   p.gas   != null ? parseFloat(((p.gas   / firstGas)   * 100).toFixed(1)) : null,
+  }));
+
+  return NextResponse.json(indexed);
 }
