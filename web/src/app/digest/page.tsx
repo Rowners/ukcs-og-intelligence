@@ -1,6 +1,8 @@
 import { dbQuery } from "@/lib/databricks";
 import BriefingCard from "@/components/BriefingCard";
 
+export const revalidate = 3600; // re-fetch from Databricks at most once per hour
+
 interface Briefing {
   ticker: string;
   company_name: string;
