@@ -33,25 +33,25 @@ export async function GET(req: NextRequest) {
   try {
     const opts = { period1: start, period2: end, interval: "1wk" as const };
 
-    const [shareResult, brentResult, gasResult] = await Promise.all([
-      yahooFinance.chart(yf_symbol,   opts),
-      yahooFinance.chart(BRENT_TICKER, opts),
-      yahooFinance.chart(GAS_TICKER,   opts),
+    const [shareQuotes, brentQuotes, gasQuotes] = await Promise.all([
+      yahooFinance.historical(yf_symbol,   opts),
+      yahooFinance.historical(BRENT_TICKER, opts),
+      yahooFinance.historical(GAS_TICKER,   opts),
     ]);
 
     // Build date-keyed maps for commodity prices
     const brentMap: Record<string, number> = {};
     const gasMap:   Record<string, number> = {};
 
-    for (const q of brentResult.quotes) {
+    for (const q of brentQuotes) {
       if (q.date && q.close != null) brentMap[dateKey(q.date)] = q.close;
     }
-    for (const q of gasResult.quotes) {
+    for (const q of gasQuotes) {
       if (q.date && q.close != null) gasMap[dateKey(q.date)] = q.close;
     }
 
     // Align all series to share price dates
-    const raw = shareResult.quotes
+    const raw = shareQuotes
       .filter(q => q.date && q.close != null)
       .map(q => ({
         date:  dateKey(q.date),
