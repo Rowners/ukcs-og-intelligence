@@ -20,6 +20,12 @@ export default function Nav() {
           >
             Data Explorer
           </Link>
+          <Link
+            href="/price-analysis"
+            className="text-[#A2F3F3] hover:text-[#00EDED] transition-colors"
+          >
+            Price Analysis
+          </Link>
         </div>
       </div>
     </nav>
