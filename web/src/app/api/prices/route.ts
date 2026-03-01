@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import yahooFinance from "yahoo-finance2";
 
-// Suppress yahoo-finance2 validation notices that would otherwise throw
-yahooFinance.setGlobalConfig({ validation: { logErrors: false } });
-
 interface YFRow {
   date: Date;
   close: number | null;
