@@ -91,22 +91,35 @@ export default function ProductionExplorer() {
     return field === "ALL" ? rows : rows.filter((r) => r.FIELDNAME === field);
   }, [rows, field]);
 
-  // Aggregate by period (sum across fields)
+  // Aggregate by period (sum volumes; average water cut)
   const chartData = useMemo(() => {
     const byPeriod: Record<string, Record<string, number>> = {};
+    const wcCount: Record<string, number> = {};
     for (const r of filtered) {
       const key = monthLabel(r.PERIODYR, r.PERIODMNTH);
       if (!byPeriod[key]) byPeriod[key] = {};
       for (const k of ALL_METRIC_KEYS) {
         const v = r[k] as number | null;
         if (v != null) {
-          byPeriod[key][k as string] = (byPeriod[key][k as string] ?? 0) + v;
+          if (k === "water_cut_pct") {
+            byPeriod[key]["water_cut_pct"] = (byPeriod[key]["water_cut_pct"] ?? 0) + v;
+            wcCount[key] = (wcCount[key] ?? 0) + 1;
+          } else {
+            byPeriod[key][k as string] = (byPeriod[key][k as string] ?? 0) + v;
+          }
         }
       }
     }
     return Object.entries(byPeriod)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([period, vals]) => ({ period, ...vals }));
+      .map(([period, vals]) => ({
+        period,
+        ...vals,
+        // Average WC across fields rather than summing
+        ...(vals["water_cut_pct"] != null && wcCount[period]
+          ? { water_cut_pct: vals["water_cut_pct"] / wcCount[period] }
+          : {}),
+      }));
   }, [filtered]);
 
   // WC badge: show hovered value or fall back to latest data point
@@ -192,7 +205,10 @@ export default function ProductionExplorer() {
                 interval="preserveStartEnd"
               />
               <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Tooltip
+                contentStyle={TOOLTIP_STYLE}
+                formatter={(value: number) => value.toFixed(1)}
+              />
               <Legend wrapperStyle={{ color: "#A2F3F3", fontSize: 12 }} />
               {PROD_METRICS.map((m) => (
                 <Line
