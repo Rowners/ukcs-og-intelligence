@@ -43,6 +43,7 @@ const ALL_METRIC_KEYS: (keyof ProductionRow)[] = [
   "OILPRODMBD", "AGASPROMMS", "DGASPROMMS", "water_cut_pct",
 ];
 
+
 const TOOLTIP_STYLE = {
   background: "#053057",
   border: "1px solid #00EDED40",
@@ -110,7 +111,7 @@ export default function ProductionExplorer() {
 
   // WC badge: show hovered value or fall back to latest data point
   const latestWC = chartData.length > 0
-    ? (chartData[chartData.length - 1].water_cut_pct as number | undefined) ?? null
+    ? ((chartData[chartData.length - 1] as Record<string, unknown>)["water_cut_pct"] as number | undefined) ?? null
     : null;
   const displayWC = activeWC ?? latestWC;
 
