@@ -33,12 +33,23 @@ const OPERATORS = [
   { label: "Ithaca Energy", value: "ITHACA ENERGY" },
 ];
 
-const METRICS: { key: keyof ProductionRow; label: string; color: string }[] = [
+const PROD_METRICS: { key: keyof ProductionRow; label: string; color: string }[] = [
   { key: "OILPRODMBD", label: "Oil (Mbbl)", color: "#00EDED" },
   { key: "AGASPROMMS", label: "Gas-Assoc (MMscf)", color: "#A2F3F3" },
   { key: "DGASPROMMS", label: "Gas-Disassoc (MMscf)", color: "#7dd3fc" },
-  { key: "water_cut_pct", label: "Water Cut (%)", color: "#fb923c" },
 ];
+
+const ALL_METRIC_KEYS: (keyof ProductionRow)[] = [
+  "OILPRODMBD", "AGASPROMMS", "DGASPROMMS", "water_cut_pct",
+];
+
+const TOOLTIP_STYLE = {
+  background: "#053057",
+  border: "1px solid #00EDED40",
+  borderRadius: 6,
+  color: "#A2F3F3",
+  fontSize: 12,
+};
 
 function monthLabel(yr: number, mo: number) {
   return `${yr}-${String(mo).padStart(2, "0")}`;
@@ -50,6 +61,7 @@ export default function ProductionExplorer() {
   const [rows, setRows] = useState<ProductionRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeWC, setActiveWC] = useState<number | null>(null);
 
   // Fetch when operator changes
   useEffect(() => {
@@ -84,10 +96,10 @@ export default function ProductionExplorer() {
     for (const r of filtered) {
       const key = monthLabel(r.PERIODYR, r.PERIODMNTH);
       if (!byPeriod[key]) byPeriod[key] = {};
-      for (const m of METRICS) {
-        const v = r[m.key] as number | null;
+      for (const k of ALL_METRIC_KEYS) {
+        const v = r[k] as number | null;
         if (v != null) {
-          byPeriod[key][m.key] = (byPeriod[key][m.key] ?? 0) + v;
+          byPeriod[key][k as string] = (byPeriod[key][k as string] ?? 0) + v;
         }
       }
     }
@@ -95,6 +107,21 @@ export default function ProductionExplorer() {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([period, vals]) => ({ period, ...vals }));
   }, [filtered]);
+
+  // WC badge: show hovered value or fall back to latest data point
+  const latestWC = chartData.length > 0
+    ? (chartData[chartData.length - 1].water_cut_pct as number | undefined) ?? null
+    : null;
+  const displayWC = activeWC ?? latestWC;
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handleChartMouseMove = (state: any) => {
+    if (state?.activePayload?.length) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const entry = state.activePayload.find((p: any) => p.dataKey === "water_cut_pct");
+      if (entry != null) setActiveWC(entry.value as number);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -133,14 +160,76 @@ export default function ProductionExplorer() {
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Charts */}
       {loading && <p className="text-[#A2F3F3]/50 text-sm">Loading...</p>}
       {error && <p className="text-red-400 text-sm">{error}</p>}
 
       {!loading && !error && chartData.length > 0 && (
-        <div className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15">
-          <ResponsiveContainer width="100%" height={360}>
-            <LineChart data={chartData} margin={{ top: 4, right: 16, left: 0, bottom: 4 }}>
+        <div
+          className="bg-[#304550] rounded-lg p-4 border border-[#00EDED]/15"
+          onMouseLeave={() => setActiveWC(null)}
+        >
+          {/* Panel label */}
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] text-[#A2F3F3]/50 uppercase tracking-widest">Production Volumes</span>
+            <span className="text-[9px] text-[#A2F3F3]/30">Mbbl / MMscf</span>
+          </div>
+
+          {/* Production chart */}
+          <ResponsiveContainer width="100%" height={260}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+              syncId="production-sync"
+              onMouseMove={handleChartMouseMove}
+            >
+              <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
+              <XAxis
+                dataKey="period"
+                tick={{ fill: "#A2F3F3", fontSize: 11 }}
+                tickLine={false}
+                interval="preserveStartEnd"
+              />
+              <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} />
+              <Tooltip contentStyle={TOOLTIP_STYLE} />
+              <Legend wrapperStyle={{ color: "#A2F3F3", fontSize: 12 }} />
+              {PROD_METRICS.map((m) => (
+                <Line
+                  key={m.key as string}
+                  type="monotone"
+                  dataKey={m.key as string}
+                  name={m.label}
+                  stroke={m.color}
+                  dot={false}
+                  strokeWidth={1.5}
+                />
+              ))}
+            </LineChart>
+          </ResponsiveContainer>
+
+          {/* Divider with WC badge */}
+          <div className="relative border-t border-dashed border-white/10 my-3">
+            {displayWC != null && (
+              <div className="absolute right-0 -top-[11px] bg-[#fb923c]/15 border border-[#fb923c]/40 rounded px-2 py-px text-[9px] text-[#fb923c] tracking-wider uppercase">
+                {activeWC != null ? "WC:" : "Latest WC:"} {displayWC.toFixed(1)}%
+              </div>
+            )}
+          </div>
+
+          {/* Water cut panel label */}
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-[10px] text-[#A2F3F3]/50 uppercase tracking-widest">Water Cut</span>
+            <span className="text-[9px] text-[#A2F3F3]/30">%</span>
+          </div>
+
+          {/* Water cut chart */}
+          <ResponsiveContainer width="100%" height={120}>
+            <LineChart
+              data={chartData}
+              margin={{ top: 4, right: 16, left: 0, bottom: 4 }}
+              syncId="production-sync"
+              onMouseMove={handleChartMouseMove}
+            >
               <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
               <XAxis
                 dataKey="period"
@@ -150,26 +239,17 @@ export default function ProductionExplorer() {
               />
               <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} />
               <Tooltip
-                contentStyle={{
-                  background: "#053057",
-                  border: "1px solid #00EDED40",
-                  borderRadius: 6,
-                  color: "#A2F3F3",
-                  fontSize: 12,
-                }}
+                contentStyle={TOOLTIP_STYLE}
+                formatter={(value: number) => [`${value.toFixed(1)}%`, "Water Cut"]}
               />
-              <Legend wrapperStyle={{ color: "#A2F3F3", fontSize: 12 }} />
-              {METRICS.map((m) => (
-                <Line
-                  key={m.key}
-                  type="monotone"
-                  dataKey={m.key}
-                  name={m.label}
-                  stroke={m.color}
-                  dot={false}
-                  strokeWidth={1.5}
-                />
-              ))}
+              <Line
+                type="monotone"
+                dataKey="water_cut_pct"
+                name="Water Cut (%)"
+                stroke="#fb923c"
+                dot={false}
+                strokeWidth={1.5}
+              />
             </LineChart>
           </ResponsiveContainer>
         </div>
