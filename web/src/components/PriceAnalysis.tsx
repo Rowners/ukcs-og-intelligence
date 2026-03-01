@@ -97,7 +97,7 @@ export default function PriceAnalysis() {
         }
 
         const raw: PricePoint[] = [];
-        for (const [date, share] of shareMap.entries()) {
+        for (const [date, share] of Array.from(shareMap.entries())) {
           raw.push({
             date,
             share,
