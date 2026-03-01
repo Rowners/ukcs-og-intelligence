@@ -118,7 +118,7 @@ export default function PriceAnalysis() {
               <LineChart data={data.share} syncId={SYNC_ID} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
                 <XAxis dataKey="date" tick={false} tickLine={false} height={4} />
-                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} domain={["auto", "auto"]} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   formatter={(v: number) => [`${v.toFixed(1)} GBp`, selectedOp.label]}
@@ -137,7 +137,7 @@ export default function PriceAnalysis() {
               <LineChart data={data.brent} syncId={SYNC_ID} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#00EDED18" />
                 <XAxis dataKey="date" tick={false} tickLine={false} height={4} />
-                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} domain={["auto", "auto"]} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   formatter={(v: number) => [`$${v.toFixed(2)}/bbl`, "Brent Crude"]}
@@ -161,7 +161,7 @@ export default function PriceAnalysis() {
                   tickLine={false}
                   interval="preserveStartEnd"
                 />
-                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} />
+                <YAxis tick={{ fill: "#A2F3F3", fontSize: 11 }} tickLine={false} axisLine={false} width={48} domain={["auto", "auto"]} />
                 <Tooltip
                   contentStyle={TOOLTIP_STYLE}
                   formatter={(v: number) => [`€${v.toFixed(2)}/MWh`, "TTF Gas"]}
