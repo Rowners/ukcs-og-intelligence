@@ -1,7 +1,7 @@
 import { dbQuery } from "@/lib/databricks";
 import BriefingCard from "@/components/BriefingCard";
 
-export const revalidate = 3600; // re-fetch from Databricks at most once per hour
+export const revalidate = 600; // re-fetch from Databricks at most once per 10 minutes
 
 interface Briefing {
   ticker: string;
