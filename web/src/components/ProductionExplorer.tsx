@@ -71,7 +71,13 @@ export default function ProductionExplorer() {
     setField("ALL");
 
     fetch(`/api/production?operator=${encodeURIComponent(operator)}`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) {
+          const text = await r.text();
+          throw new Error(`Server error (${r.status}) — check Vercel logs for details`);
+        }
+        return r.json();
+      })
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setRows(data);
