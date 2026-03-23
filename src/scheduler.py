@@ -62,15 +62,24 @@ def job_daily() -> None:
     except Exception as exc:
         logger.error("Investegate scrape failed: %s", exc)
 
-    # 3. Identify companies that have new RNS data since last briefing
+    # 4. Identify companies to regenerate: new RNS data OR briefing >7 days old
     try:
         rows = query("""
-            SELECT DISTINCT r.ticker
-            FROM rns_announcements_raw r
-            LEFT JOIN company_briefings b ON UPPER(r.ticker) = UPPER(b.ticker)
-            WHERE r.scraped_at > COALESCE(b.generated_at, '1900-01-01')
+            SELECT DISTINCT ticker FROM (
+                SELECT UPPER(r.ticker) AS ticker
+                FROM rns_announcements_raw r
+                LEFT JOIN company_briefings b ON UPPER(r.ticker) = UPPER(b.ticker)
+                WHERE r.scraped_at > COALESCE(b.generated_at, '1900-01-01')
+
+                UNION ALL
+
+                SELECT UPPER(ticker) AS ticker
+                FROM company_briefings
+                WHERE generated_at < CURRENT_TIMESTAMP - INTERVAL 7 DAYS
+            )
         """)
         tickers_with_new_data = [r["ticker"] for r in rows]
+        logger.info("Tickers selected for briefing refresh: %s", tickers_with_new_data)
     except Exception as exc:
         logger.warning("Could not determine tickers with new data (%s); regenerating all", exc)
         tickers_with_new_data = None
