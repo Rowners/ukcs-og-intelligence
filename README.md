@@ -153,7 +153,7 @@ npm run dev                         # http://localhost:3000
 
 ### 5. Deploy the web app on Netlify
 
-The Next.js app is in `web/`. `netlify.toml` at the repo root is what Netlify reads. The current Next.js runtime (OpenNext, for Next.js 13.5 and later) is installed by Netlify during the build. Do not add or pin `@netlify/plugin-nextjs`.
+The Next.js app is in `web/`. `netlify.toml` at the repo root is what Netlify reads. It sets the base directory, build command, and publish directory, and it loads `@netlify/plugin-nextjs` (v5, installed from `web/package.json`). That plugin is the Next.js runtime. Without it, Netlify publishes the raw `.next` folder, `plugin_state` stays `none`, no functions are created, and every route 404s.
 
 Settings for the Netlify UI or the create-site API (`build_settings` / `repo`):
 
@@ -164,7 +164,7 @@ Settings for the Netlify UI or the create-site API (`build_settings` / `repo`):
 | Publish directory | `.next` | `dir` |
 | Node.js | 20 | `NODE_VERSION` in `netlify.toml` |
 
-`dir` is relative to the base directory. The files Netlify publishes are `web/.next`. `npm run build` runs `next build`. App Router route handlers (`/api/briefings`, `/api/production`, `/api/prices`) are deployed as Netlify Functions by that runtime. Synchronous functions stop at 60 seconds.
+`dir` is relative to the base directory, so the configured publish path is `web/.next`. Leave it as `.next` in the UI. `npm run build` runs `next build`. `@netlify/plugin-nextjs` reads that output, publishes the static assets, and deploys one server function for the App Router, including `/api/briefings`, `/api/production`, and `/api/prices`. Synchronous functions stop at 60 seconds. If the plugin does not run, Netlify uploads `.next` as a static folder and every route 404s.
 
 Create the site with the API (token via `Authorization: Bearer <NETLIFY_AUTH_TOKEN>`):
 

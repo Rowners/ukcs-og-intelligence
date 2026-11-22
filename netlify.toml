@@ -1,9 +1,12 @@
-# Next.js app lives in web/. Netlify installs the current OpenNext-based
-# Next.js runtime during the build (Next.js 13.5+). Do not pin
-# @netlify/plugin-nextjs — Netlify updates that adapter on each build.
+# Next.js app lives in web/. Publish is relative to that base, so Netlify
+# publishes web/.next. The runtime below must be declared explicitly: a site
+# whose UI build settings only set base/command/publish uploads the raw .next
+# folder and never installs the OpenNext adapter (plugin_state "none", no
+# functions, every route 404).
 #
-# Publish is relative to the base directory. The deployable output is web/.next.
-# Route handlers under web/src/app/api/* become Netlify Functions.
+# @netlify/plugin-nextjs v5 (Next.js 13.5+) turns the App Router, including
+# /api/briefings, /api/production and /api/prices, into one Netlify server
+# function and serves the static assets from the adapter output.
 
 [build]
   base = "web"
@@ -12,6 +15,9 @@
 
 [build.environment]
   NODE_VERSION = "20"
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
 
 # netlify dev: Next.js listens on 3000, the Netlify wrapper on 8888.
 [dev]
