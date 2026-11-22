@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbQuery } from "@/lib/databricks";
-
-export const maxDuration = 60;
+import { dbQuery, describeDbError } from "@/lib/databricks";
 
 export interface ProductionRow {
   FIELDNAME: string;
@@ -65,6 +63,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(enriched);
   } catch (err) {
     console.error("Production API error:", err);
-    return NextResponse.json({ error: "Failed to load production data" }, { status: 500 });
+    return NextResponse.json(
+      { error: `Could not query Databricks (${describeDbError(err)})` },
+      { status: 500 }
+    );
   }
 }

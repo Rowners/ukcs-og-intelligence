@@ -13,14 +13,28 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+_REQUIRED_ENV = (
+    "DATABRICKS_SERVER_HOSTNAME",
+    "DATABRICKS_HTTP_PATH",
+    "DATABRICKS_ACCESS_TOKEN",
+)
+
+
 def _get_connection():
-    hostname = os.environ["DATABRICKS_SERVER_HOSTNAME"]
-    http_path = os.environ["DATABRICKS_HTTP_PATH"]
-    token = os.environ["DATABRICKS_ACCESS_TOKEN"]
+    missing = [name for name in _REQUIRED_ENV if not os.environ.get(name)]
+    if missing:
+        raise RuntimeError(
+            "Missing Databricks environment variables: " + ", ".join(missing)
+        )
+    # Fail in a few minutes if the warehouse never answers. The connector's
+    # default retry count (24) otherwise holds a GitHub Actions job until the
+    # workflow timeout cancels it.
     return sql.connect(
-        server_hostname=hostname,
-        http_path=http_path,
-        access_token=token,
+        server_hostname=os.environ["DATABRICKS_SERVER_HOSTNAME"],
+        http_path=os.environ["DATABRICKS_HTTP_PATH"],
+        access_token=os.environ["DATABRICKS_ACCESS_TOKEN"],
+        _socket_timeout=180,
+        _retry_stop_after_attempts_count=3,
     )
 
 
@@ -52,16 +66,24 @@ def execute(sql_text: str, params: list | None = None) -> None:
         cur.execute(sql_text, params or [])
 
 
+def _num(v) -> str:
+    """Render a numeric SQL literal. Non-numeric values become NULL."""
+    if v is None or v == "":
+        return "NULL"
+    try:
+        return repr(float(v))
+    except (TypeError, ValueError):
+        return "NULL"
+
+
 def _merge_production_batch(cur, records: list[dict]) -> None:
     """Execute a single MERGE for a batch of production records."""
-    def _val(v):
-        return "NULL" if v is None or v == "" else str(v)
-
     row_literals = ",\n".join(
-        f"('{r['FIELDNAME']}', '{r['ORGGRPNM']}', {r['PERIODYR']}, {r['PERIODMNTH']}, "
-        f"{_val(r.get('OILPRODMBD'))}, {_val(r.get('AGASPROMMS'))}, "
-        f"{_val(r.get('DGASPROMMS'))}, {_val(r.get('GCONDVOL'))}, "
-        f"{_val(r.get('GASFLARVOL'))}, {_val(r.get('WATPRODVOL'))})"
+        f"({_escape(r['FIELDNAME'])}, {_escape(r['ORGGRPNM'])}, "
+        f"{int(r['PERIODYR'])}, {int(r['PERIODMNTH'])}, "
+        f"{_num(r.get('OILPRODMBD'))}, {_num(r.get('AGASPROMMS'))}, "
+        f"{_num(r.get('DGASPROMMS'))}, {_num(r.get('GCONDVOL'))}, "
+        f"{_num(r.get('GASFLARVOL'))}, {_num(r.get('WATPRODVOL'))})"
         for r in records
     )
     cur.execute(f"""

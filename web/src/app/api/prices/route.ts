@@ -3,7 +3,8 @@ import { NextRequest, NextResponse } from "next/server";
 const OPERATOR_YF: Record<string, string> = {
   "HARBOUR ENERGY PLC": "HBR.L",
   "ENQUEST PLC":        "ENQ.L",
-  "SERICA ENERGY":      "SQZ.L",
+  // Serica's LSE TIDM changed SQZ -> SER on 27 Oct 2026. SER.L has the history.
+  "SERICA ENERGY":      "SER.L",
   "ITHACA ENERGY":      "ITH.L",
 };
 

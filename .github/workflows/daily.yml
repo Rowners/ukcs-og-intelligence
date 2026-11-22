@@ -1,5 +1,11 @@
 name: Daily pipeline
 
+# GitHub disables this schedule after 60 days without a commit to the
+# repository (the workflow state becomes disabled_inactivity). After merging,
+# open the Actions tab and confirm this workflow is enabled, then run it once
+# with "Run workflow". A green run is not enough on its own: the Databricks
+# SQL warehouse has to be running and the secrets below have to be current.
+
 on:
   schedule:
     - cron: "0 6 * * *"   # 06:00 UTC every day
@@ -15,6 +21,7 @@ jobs:
       DATABRICKS_HTTP_PATH: ${{ secrets.DATABRICKS_HTTP_PATH }}
       DATABRICKS_ACCESS_TOKEN: ${{ secrets.DATABRICKS_ACCESS_TOKEN }}
       OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+      OPENAI_MODEL: ${{ secrets.OPENAI_MODEL }}
 
     steps:
       - uses: actions/checkout@v4

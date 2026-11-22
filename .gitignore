@@ -18,6 +18,11 @@ build/
 web/.next/
 web/node_modules/
 web/out/
+web/tsconfig.tsbuildinfo
+
+# Netlify local state
+.netlify
+web/.netlify
 
 # OS
 .DS_Store

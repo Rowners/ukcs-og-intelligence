@@ -17,7 +17,7 @@ interface PriceData { share: Series[]; brent: Series[]; gas: Series[] }
 const OPERATORS = [
   { label: "Harbour Energy", value: "HARBOUR ENERGY PLC", ticker: "HBR" },
   { label: "EnQuest",        value: "ENQUEST PLC",        ticker: "ENQ" },
-  { label: "Serica Energy",  value: "SERICA ENERGY",      ticker: "SQZ" },
+  { label: "Serica Energy",  value: "SERICA ENERGY",      ticker: "SER" },
   { label: "Ithaca Energy",  value: "ITHACA ENERGY",      ticker: "ITH" },
 ];
 

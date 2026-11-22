@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbQuery } from "@/lib/databricks";
+import { dbQuery, describeDbError } from "@/lib/databricks";
 
 export interface Briefing {
   ticker: string;
@@ -32,6 +32,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows);
   } catch (err) {
     console.error("Briefings API error:", err);
-    return NextResponse.json({ error: "Failed to load briefings" }, { status: 500 });
+    return NextResponse.json(
+      { error: `Could not query Databricks (${describeDbError(err)})` },
+      { status: 500 }
+    );
   }
 }
