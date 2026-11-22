@@ -18,6 +18,7 @@ build/
 web/.next/
 web/node_modules/
 web/out/
+web/tsconfig.tsbuildinfo
 
 # OS
 .DS_Store

@@ -72,14 +72,26 @@ export default function ProductionExplorer() {
 
     fetch(`/api/production?operator=${encodeURIComponent(operator)}`)
       .then(async (r) => {
-        if (!r.ok) {
-          const text = await r.text();
-          throw new Error(`Server error (${r.status}) — check Vercel logs for details`);
+        const text = await r.text();
+        let data: { error?: string } | ProductionRow[] | null = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = null;
         }
-        return r.json();
+        if (!r.ok) {
+          const detail =
+            data && !Array.isArray(data) && data.error
+              ? data.error
+              : `Server error (${r.status})`;
+          throw new Error(detail);
+        }
+        return data;
       })
       .then((data) => {
-        if (data.error) throw new Error(data.error);
+        if (!Array.isArray(data)) {
+          throw new Error(data?.error || "Production response was empty");
+        }
         setRows(data);
       })
       .catch((e) => setError(String(e)))

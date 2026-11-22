@@ -14,27 +14,29 @@ Water cut fix:
 
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 from openai import OpenAI
 
+from src.companies import by_ticker
 from src.databricks.client import query, save_briefing
 
 logger = logging.getLogger(__name__)
+
+# gpt-4o still answers the API, but OpenAI has scheduled it to shut down on
+# 14 January 2027. Override with OPENAI_MODEL before that date.
+DEFAULT_MODEL = "gpt-4o"
+_GPT4O_SHUTDOWN = "2027-01-14"
 
 # M3 to barrels conversion
 M3_TO_BBL = 6.2898
 M3_TO_MBBL = M3_TO_BBL / 1000.0
 
-WATCHLIST = [
-    {"ticker": "HBR", "company_name": "Harbour Energy", "nsta_operator": "HARBOUR ENERGY PLC"},
-    {"ticker": "ENQ", "company_name": "EnQuest",         "nsta_operator": "ENQUEST PLC"},
-    {"ticker": "SQZ", "company_name": "Serica Energy",   "nsta_operator": "SERICA ENERGY"},
-    {"ticker": "ITH", "company_name": "Ithaca Energy",   "nsta_operator": "ITHACA ENERGY"},
-]
+def _resolve_model(model: str | None) -> str:
+    return model or os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
 
 BRIEFING_PROMPT = """You are an expert oil and gas analyst covering the UK Continental Shelf (UKCS).
-Generate a structured intelligence briefing for {company_name} ({ticker}).
+Generate a structured intelligence briefing for {company_name} (LSE: {lse_tidm}).
 
 Write exactly four sections with these headings:
 1. Production Performance
@@ -219,12 +221,13 @@ def _format_nsta_news(rows: list[dict]) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-def generate_briefing(company: dict, year: int | None = None, model: str = "gpt-4o") -> str:
+def generate_briefing(company: dict, year: int | None = None, model: str | None = None) -> str:
     """Generate and save a briefing for one company. Returns the briefing text."""
     ticker = company["ticker"]
     company_name = company["company_name"]
     nsta_operator = company["nsta_operator"]
-    year = year or datetime.now().year
+    year = year or datetime.now(timezone.utc).year
+    model = _resolve_model(model)
 
     logger.info("Generating briefing for %s (%s)", company_name, ticker)
 
@@ -240,14 +243,16 @@ def generate_briefing(company: dict, year: int | None = None, model: str = "gpt-
 
     prompt = BRIEFING_PROMPT.format(
         company_name=company_name,
-        ticker=ticker,
+        lse_tidm=company.get("lse_tidm", ticker),
         market_context=market_context,
         production_table=production_table,
         rns_text=rns_text,
         nsta_news_text=nsta_news_text,
     )
 
-    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("Missing environment variable: OPENAI_API_KEY")
+    client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=120.0, max_retries=1)
     response = client.chat.completions.create(
         model=model,
         messages=[{"role": "user", "content": prompt}],
@@ -260,28 +265,40 @@ def generate_briefing(company: dict, year: int | None = None, model: str = "gpt-
     return briefing
 
 
-def run(tickers: list[str] | None = None, year: int | None = None, model: str = "gpt-4o",
-        delay: int = 30) -> None:
+def run(tickers: list[str] | None = None, year: int | None = None, model: str | None = None,
+        delay: int = 30) -> int:
     """
-    Generate briefings for all watchlist companies (or a subset by ticker).
-    delay: seconds to wait between companies to avoid TPM rate limits.
+    Generate briefings for the watchlist (or a subset by ticker).
+    delay: seconds between companies, to stay under token-per-minute limits.
+    Returns the number of companies that failed.
     """
     import time
 
-    companies = WATCHLIST
-    if tickers is not None:
-        tickers_upper = {t.upper() for t in tickers}
-        companies = [c for c in WATCHLIST if c["ticker"] in tickers_upper]
+    model = _resolve_model(model)
+    if model == DEFAULT_MODEL:
+        logger.warning(
+            "OpenAI model %s shuts down on %s. Set OPENAI_MODEL to the replacement before then.",
+            model,
+            _GPT4O_SHUTDOWN,
+        )
+
+    companies = by_ticker(tickers)
+    failures = 0
 
     for i, company in enumerate(companies):
         try:
             generate_briefing(company, year=year, model=model)
         except Exception as exc:
+            failures += 1
             logger.error("Failed to generate briefing for %s: %s", company["ticker"], exc)
 
         if i < len(companies) - 1:
             logger.info("Waiting %ds before next company (TPM rate limit)...", delay)
             time.sleep(delay)
+
+    if failures:
+        raise RuntimeError(f"Briefing generation failed for {failures} of {len(companies)} companies")
+    return failures
 
 
 if __name__ == "__main__":

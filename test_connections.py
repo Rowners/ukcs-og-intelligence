@@ -37,9 +37,10 @@ def test_databricks_tables():
     print("Checking expected Delta tables exist...")
     expected = [
         "nsta_field_production_raw",
-        "nsta_operator_mapping",
         "nsta_news_raw",
         "rns_announcements_raw",
+        "brent_crude_prices",
+        "company_share_prices",
         "company_briefings",
     ]
     try:
@@ -72,14 +73,17 @@ def test_openai():
 
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+        client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=30.0, max_retries=1)
+        model = os.environ.get("OPENAI_MODEL") or "gpt-4o"
         response = client.chat.completions.create(
-            model="gpt-4o",
+            model=model,
             messages=[{"role": "user", "content": "Reply with the single word: ok"}],
             max_tokens=5,
         )
         reply = response.choices[0].message.content.strip()
-        print(f"  OK — gpt-4o responded: '{reply}'")
+        print(f"  OK — {model} responded: '{reply}'")
+        if model == "gpt-4o":
+            print("  NOTE — gpt-4o shuts down on 2027-01-14. Set OPENAI_MODEL before then.")
         return True
     except Exception as e:
         print(f"  FAIL — {e}")

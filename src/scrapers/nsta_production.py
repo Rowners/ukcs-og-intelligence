@@ -1,8 +1,9 @@
 """
 Fetch UKCS field production data from NSTA ArcGIS REST API and upsert to Delta.
 
-API endpoint returns up to 2000 features per request; uses resultOffset for
-pagination until fewer than the batch size are returned.
+The feature service's maxRecordCount is 1000. Asking for more can return a
+full page with exceededTransferLimit set, so pagination follows that flag
+rather than assuming a fixed page size.
 """
 
 import logging
@@ -19,7 +20,7 @@ BASE_URL = (
     "UKCS_hydrocarbon_field_production_reports_PPRS_points_(WGS84)/FeatureServer/0/query"
 )
 
-BATCH_SIZE = 2000
+BATCH_SIZE = 1000
 
 FIELDS = [
     "FIELDNAME",
@@ -35,7 +36,7 @@ FIELDS = [
 ]
 
 
-def _fetch_page(offset: int, where: str = "1=1") -> list[dict]:
+def _fetch_page(offset: int, where: str = "1=1") -> tuple[list[dict], bool]:
     params = {
         "where": where,
         "outFields": ",".join(FIELDS),
@@ -44,7 +45,7 @@ def _fetch_page(offset: int, where: str = "1=1") -> list[dict]:
         "f": "json",
         "returnGeometry": "false",
     }
-    resp = requests.get(BASE_URL, params=params, timeout=60)
+    resp = requests.get(BASE_URL, params=params, timeout=(10, 60))
     resp.raise_for_status()
     data = resp.json()
 
@@ -52,38 +53,39 @@ def _fetch_page(offset: int, where: str = "1=1") -> list[dict]:
         raise RuntimeError(f"ArcGIS API error: {data['error']}")
 
     features = data.get("features", [])
-    return [f["attributes"] for f in features]
+    exceeded = bool(data.get("exceededTransferLimit"))
+    return [f["attributes"] for f in features], exceeded
+
+
+def _fetch_all_pages(where: str) -> list[dict]:
+    all_records: list[dict] = []
+    offset = 0
+    while True:
+        if offset > 500_000:
+            raise RuntimeError(f"ArcGIS pagination ran past 500k rows for where={where}")
+        logger.info("Fetching production records where=%s offset=%d", where, offset)
+        batch, exceeded = _fetch_page(offset, where=where)
+        all_records.extend(batch)
+        # A short page is the end. A full page, or an explicit exceeded flag,
+        # means the service has more rows at the next offset.
+        if not batch or (not exceeded and len(batch) < BATCH_SIZE):
+            break
+        offset += len(batch)
+    return all_records
 
 
 def fetch_for_year(year: int) -> list[dict]:
     """Fetch only records for a specific year — used for monthly refreshes."""
-    where = f"PERIODYR = {year}"
-    all_records = []
-    offset = 0
-    while True:
-        logger.info("Fetching year=%d records at offset %d", year, offset)
-        batch = _fetch_page(offset, where=where)
-        all_records.extend(batch)
-        if len(batch) < BATCH_SIZE:
-            break
-        offset += BATCH_SIZE
-    logger.info("Fetched %d records for year %d", len(all_records), year)
-    return all_records
+    records = _fetch_all_pages(f"PERIODYR = {int(year)}")
+    logger.info("Fetched %d records for year %d", len(records), year)
+    return records
 
 
 def fetch_all() -> list[dict]:
     """Page through the full ArcGIS API. Use only for explicit full reloads."""
-    all_records = []
-    offset = 0
-    while True:
-        logger.info("Fetching all production records at offset %d", offset)
-        batch = _fetch_page(offset)
-        all_records.extend(batch)
-        if len(batch) < BATCH_SIZE:
-            break
-        offset += BATCH_SIZE
-    logger.info("Fetched %d total production records", len(all_records))
-    return all_records
+    records = _fetch_all_pages("1=1")
+    logger.info("Fetched %d total production records", len(records))
+    return records
 
 
 def run(year: int | None = None, full_reload: bool = False) -> int:

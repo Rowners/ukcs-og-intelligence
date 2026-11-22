@@ -2,22 +2,20 @@
 Scheduler for UKCS Intelligence Platform.
 
 Jobs:
-  - Daily (06:00 UTC): NSTA news scrape, Investegate RNS scrape,
-                       then generate briefings for companies with new data.
-  - Monthly (1st of month, 07:00 UTC): Full NSTA production refresh.
+  - Daily (06:00 UTC): prices, NSTA news, LSE RNS, then briefings.
+  - Monthly (1st of month, 07:00 UTC): NSTA production refresh for the current year.
 
-Run as a long-lived process (e.g. via systemd or Docker):
-    python -m src.scheduler
+GitHub Actions (.github/workflows) is what actually runs these on a schedule.
+`python -m src.scheduler --job serve` is only for a long-lived process.
 
-Or invoke individual jobs directly:
-    python -m src.scheduler --job daily
-    python -m src.scheduler --job monthly
+Each job exits non-zero if a step fails. Failures used to be logged and then
+ignored, so a workflow could go green without writing anything.
 """
 
 import argparse
 import logging
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from apscheduler.schedulers.blocking import BlockingScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -33,55 +31,54 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def job_daily() -> None:
-    """Daily: market data, news + RNS scrape, then generate briefings for companies with new data."""
-    from src.scrapers import investegate, nsta_news, market_data
+def _run_step(name: str, fn) -> str | None:
+    try:
+        fn()
+        return None
+    except Exception as exc:
+        logger.error("%s failed: %s", name, exc)
+        return f"{name}: {exc}"
+
+
+def job_daily() -> int:
+    """Prices, news, RNS, then briefings. Returns 0 only if every step succeeded."""
     from src.intelligence import briefings
+    from src.scrapers import investegate, market_data, nsta_news
 
-    logger.info("=== Daily job started %s ===", datetime.utcnow().isoformat())
-
-    # 1. Market data (Brent + share prices)
-    try:
-        market_data.run()
-        logger.info("Market data updated")
-    except Exception as exc:
-        logger.error("Market data scrape failed: %s", exc)
-
-    # 2. Scrape NSTA news
-    try:
-        n = nsta_news.run()
-        logger.info("NSTA news: %d records upserted", n)
-    except Exception as exc:
-        logger.error("NSTA news scrape failed: %s", exc)
-
-    # 3. Scrape Investegate RNS
-    try:
-        n = investegate.run()
-        logger.info("Investegate RNS: %d records upserted", n)
-    except Exception as exc:
-        logger.error("Investegate scrape failed: %s", exc)
-
-    # 4. Generate briefings for all watchlist companies (daily refresh)
-    try:
-        briefings.run(tickers=None)
-    except Exception as exc:
-        logger.error("Briefing generation failed: %s", exc)
-
+    logger.info("=== Daily job started %s ===", datetime.now(timezone.utc).isoformat())
+    errors = [
+        err
+        for err in (
+            _run_step("Market data", market_data.run),
+            _run_step("NSTA news", nsta_news.run),
+            _run_step("RNS announcements", investegate.run),
+            _run_step("Briefings", lambda: briefings.run(tickers=None)),
+        )
+        if err
+    ]
+    if errors:
+        logger.error("=== Daily job finished with %d failure(s) ===", len(errors))
+        return 1
     logger.info("=== Daily job complete ===")
+    return 0
 
 
-def job_monthly() -> None:
-    """Monthly: full NSTA production data refresh."""
+def job_monthly() -> int:
+    """Current-year NSTA production refresh. Returns 0 only if rows were written."""
     from src.scrapers import nsta_production
 
-    logger.info("=== Monthly production refresh started %s ===", datetime.utcnow().isoformat())
+    logger.info("=== Monthly production refresh started %s ===", datetime.now(timezone.utc).isoformat())
     try:
         n = nsta_production.run()
-        logger.info("Production refresh: %d records upserted", n)
     except Exception as exc:
         logger.error("Production refresh failed: %s", exc)
-
+        return 1
+    logger.info("Production refresh: %d records upserted", n)
+    if not n:
+        logger.error("Production refresh wrote 0 rows")
+        return 1
     logger.info("=== Monthly production refresh complete ===")
+    return 0
 
 
 def main() -> None:
@@ -95,9 +92,9 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.job == "daily":
-        job_daily()
+        sys.exit(job_daily())
     elif args.job == "monthly":
-        job_monthly()
+        sys.exit(job_monthly())
     else:
         scheduler = BlockingScheduler(timezone="UTC")
         scheduler.add_job(job_daily, CronTrigger(hour=6, minute=0), id="daily")
