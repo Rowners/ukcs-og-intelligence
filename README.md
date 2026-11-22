@@ -132,7 +132,7 @@ OPENAI_API_KEY=sk-proj-...
 OPENAI_MODEL=gpt-4o
 ```
 
-`gpt-4o` still serves the API and shuts down on 14 January 2027. Set `OPENAI_MODEL` to the current replacement before then. The same four names are GitHub Actions secrets (`OPENAI_MODEL` is optional) and, except for the OpenAI ones, Vercel environment variables for the web app.
+`gpt-4o` still serves the API and shuts down on 14 January 2027. Set `OPENAI_MODEL` to the current replacement before then. The same four names are GitHub Actions secrets (`OPENAI_MODEL` is optional). The web app does not use the OpenAI key.
 
 ### 3. Test connections
 
@@ -149,6 +149,62 @@ cd web
 npm install
 cp .env.local.example .env.local   # add Databricks credentials
 npm run dev                         # http://localhost:3000
+```
+
+### 5. Deploy the web app on Netlify
+
+The Next.js app is in `web/`. `netlify.toml` at the repo root is what Netlify reads. The current Next.js runtime (OpenNext, for Next.js 13.5 and later) is installed by Netlify during the build. Do not add or pin `@netlify/plugin-nextjs`.
+
+Settings for the Netlify UI or the create-site API (`build_settings` / `repo`):
+
+| Setting | Value | API field |
+|---------|--------|-----------|
+| Base directory | `web` | `base` |
+| Build command | `npm run build` | `cmd` |
+| Publish directory | `.next` | `dir` |
+| Node.js | 20 | `NODE_VERSION` in `netlify.toml` |
+
+`dir` is relative to the base directory. The files Netlify publishes are `web/.next`. `npm run build` runs `next build`. App Router route handlers (`/api/briefings`, `/api/production`, `/api/prices`) are deployed as Netlify Functions by that runtime. Synchronous functions stop at 60 seconds.
+
+Create the site with the API (token via `Authorization: Bearer <NETLIFY_AUTH_TOKEN>`):
+
+```http
+POST https://api.netlify.com/api/v1/{account_slug}/sites
+```
+
+```json
+{
+  "name": "ukcs-og-intelligence",
+  "repo": {
+    "provider": "github",
+    "repo_path": "Rowners/ukcs-og-intelligence",
+    "repo_branch": "main",
+    "cmd": "npm run build",
+    "dir": ".next"
+  },
+  "build_settings": {
+    "base": "web",
+    "cmd": "npm run build",
+    "dir": ".next"
+  }
+}
+```
+
+`cmd` and `dir` are the fields on the public `repo` object. `base` is `build_settings.base`. `dir` is relative to that base, so the published folder is `web/.next`. The root `netlify.toml` sets the same three values and overrides the UI if they drift.
+
+Set these as site environment variables (available to builds and functions). Do not put them in the repo:
+
+```
+DATABRICKS_SERVER_HOSTNAME=dbc-14a9e097-c58d.cloud.databricks.com
+DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/ec8cf8525e01cae5
+DATABRICKS_ACCESS_TOKEN=<new personal access token>
+```
+
+The hostname and warehouse above are the existing workspace. The previous access token no longer exists, which is why the live queries fail immediately. Mint a new token in that workspace and store only the new value. The SQL warehouse `ec8cf8525e01cae5` is running and the Delta tables are intact, including the briefings from March 2026.
+
+```bash
+# From the repo root, after the three variables are in the environment
+npx netlify build
 ```
 
 ## Running the pipeline

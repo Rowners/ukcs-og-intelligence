@@ -1,8 +1,10 @@
 import { dbQuery, describeDbError } from "@/lib/databricks";
 import BriefingCard from "@/components/BriefingCard";
 
+// Time-based ISR. Netlify's Next.js runtime caches this page and revalidates
+// it through the CDN (stale-while-revalidate). Netlify does not honor
+// Next.js maxDuration; synchronous functions are capped at 60 seconds.
 export const revalidate = 120;
-export const maxDuration = 30;
 
 interface Briefing {
   ticker: string;
@@ -50,7 +52,7 @@ export default async function DigestPage() {
         <p className="text-[#A2F3F3]/70 text-sm mt-3 leading-relaxed">
           This page reads the Databricks table <span className="font-mono text-[#A2F3F3]">company_briefings</span>.
           The query failed. Start the SQL warehouse, then check the Databricks environment
-          variables on Vercel (<span className="font-mono">DATABRICKS_SERVER_HOSTNAME</span>,{" "}
+          variables on Netlify (<span className="font-mono">DATABRICKS_SERVER_HOSTNAME</span>,{" "}
           <span className="font-mono">DATABRICKS_HTTP_PATH</span>,{" "}
           <span className="font-mono">DATABRICKS_ACCESS_TOKEN</span>).
         </p>

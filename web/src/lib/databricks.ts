@@ -14,8 +14,22 @@ const REQUIRED_ENV = [
   "DATABRICKS_ACCESS_TOKEN",
 ] as const;
 
+/**
+ * Netlify Functions expose site env through Netlify.env. Next.js dev and
+ * `next build` only have process.env, so fall back when the Netlify global
+ * is absent.
+ */
+function readEnv(name: string): string | undefined {
+  const netlify = (globalThis as { Netlify?: { env?: { get?: (key: string) => string | undefined } } })
+    .Netlify?.env;
+  const fromNetlify = netlify?.get?.(name);
+  if (typeof fromNetlify === "string" && fromNetlify.length > 0) return fromNetlify;
+  const fromProcess = process.env[name];
+  return fromProcess && fromProcess.length > 0 ? fromProcess : undefined;
+}
+
 export function missingDatabricksEnv(): string[] {
-  return REQUIRED_ENV.filter((name) => !process.env[name]);
+  return REQUIRED_ENV.filter((name) => !readEnv(name));
 }
 
 /** Short message safe to show in the UI. Tokens are stripped. */
@@ -35,11 +49,11 @@ async function openSession() {
   }
   const client = getClient();
   await client.connect({
-    host: process.env.DATABRICKS_SERVER_HOSTNAME!,
-    path: process.env.DATABRICKS_HTTP_PATH!,
-    token: process.env.DATABRICKS_ACCESS_TOKEN!,
-    // Milliseconds. A stopped warehouse or dead host should fail the request
-    // instead of holding the serverless function until Vercel kills it.
+    host: readEnv("DATABRICKS_SERVER_HOSTNAME")!,
+    path: readEnv("DATABRICKS_HTTP_PATH")!,
+    token: readEnv("DATABRICKS_ACCESS_TOKEN")!,
+    // Milliseconds. Netlify synchronous functions stop at 60s and that limit
+    // is not configurable, so fail the query well inside it.
     socketTimeout: 20_000,
   });
   const session = await client.openSession();

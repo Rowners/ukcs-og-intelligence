@@ -1,8 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { dbQuery, describeDbError } from "@/lib/databricks";
 
-export const maxDuration = 60;
-
 export interface ProductionRow {
   FIELDNAME: string;
   ORGGRPNM: string;
