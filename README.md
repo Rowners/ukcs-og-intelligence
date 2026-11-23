@@ -5,7 +5,7 @@ An end-to-end data pipeline and intelligence platform for the UK Continental She
 ## What it does
 
 - **Scrapes** monthly field production data from the NSTA's public ArcGIS API (all UKCS fields)
-- **Scrapes** NSTA regulatory news and RNS announcements from the London Stock Exchange for four operators
+- **Scrapes** NSTA regulatory news and RNS announcements from the London Stock Exchange for three operators
 - **Tracks** Brent crude prices and LSE share prices daily from Yahoo Finance's chart API
 - **Generates** structured GPT-4o analyst briefings covering production performance, corporate developments, regulatory context, and commercial outlook
 - **Stores** everything in Databricks Delta tables
@@ -17,7 +17,6 @@ An end-to-end data pipeline and intelligence platform for the UK Continental She
 |--------|---------|---------------|
 | HBR | Harbour Energy | HARBOUR ENERGY PLC |
 | ENQ | EnQuest | ENQUEST PLC |
-| SQZ (LSE: SER since 27 Oct 2026) | Serica Energy | SERICA ENERGY |
 | ITH | Ithaca Energy | ITHACA ENERGY |
 
 ## Architecture
@@ -30,7 +29,7 @@ Public data sources
 
 Yahoo Finance v8 chart API
   ├── BZ=F (Brent crude)    → brent_crude_prices         (Delta)
-  └── HBR.L / ENQ.L / SER.L / ITH.L → company_share_prices (Delta)
+  └── HBR.L / ENQ.L / ITH.L → company_share_prices (Delta)
 
 GPT-4o briefing generator   → company_briefings          (Delta)
 
@@ -56,7 +55,7 @@ Interactive production data viewer backed by Databricks. Features:
 
 ### Price Analysis (`/price-analysis`)
 Live market data fetched directly from Yahoo Finance's v8 chart API at request time (no Databricks). Three stacked, synced panels:
-- **Share price** — in GBp (LSE tickers: HBR.L, ENQ.L, SER.L, ITH.L). Serica's TIDM changed from SQZ to SER on 27 October 2026; stored rows stay under SQZ.
+- **Share price** — in GBp (LSE tickers: HBR.L, ENQ.L, ITH.L).
 - **Brent Crude** — ICE Last Day Financial Futures (`BZ=F`), USD/bbl
 - **TTF Natural Gas** — Dutch TTF Calendar Futures (`TTF=F`), EUR/MWh
 
@@ -250,7 +249,7 @@ A job exits non-zero if a step fails. The SQL warehouse has to be running first:
 python -m src.intelligence.briefings --tickers HBR
 
 # Subset
-python -m src.intelligence.briefings --tickers ENQ SQZ --delay 15
+python -m src.intelligence.briefings --tickers ENQ ITH --delay 15
 ```
 
 ## Delta tables
@@ -269,6 +268,6 @@ python -m src.intelligence.briefings --tickers ENQ SQZ --delay 15
 - **Databricks Free Edition**: The SQL warehouse auto-pauses after inactivity. Start it manually before running scripts or allow a 2–5 minute cold-start delay on first connection.
 - **OpenAI rate limits**: The briefing generator waits 30 seconds between companies. Use `--delay` to adjust. The default model is `gpt-6.1-terra`. `gpt-4o` shuts down on 14 January 2027.
 - **NSTA production data**: The ArcGIS API returns multiple sub-unit rows per field per period. These are aggregated (summed) before upsert so each FIELDNAME + PERIODYR + PERIODMNTH combination is unique. Pages are followed while `exceededTransferLimit` is set (the service caps a page at 1000 rows).
-- **RNS**: The LSE search API returns the five most recent announcements per issuer. Serica is requested under TIDM SER and stored as SQZ.
+- **RNS**: The LSE search API returns the five most recent announcements per issuer. Serica Energy is not on the watchlist. Old `company_briefings` rows for ticker SQZ stay in Databricks and are filtered out of the digest.
 - **Price Analysis**: Live data is fetched server-side from Yahoo Finance's v8 chart API with a browser-like User-Agent. No API key required. Data is not cached — each page load makes fresh requests.
 - **Water cut**: Reported as a percentage average across all selected fields. WATPRODVOL (m³) is converted to Mbbl (× 0.0062898) before computing water cut = water / (water + oil).

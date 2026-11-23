@@ -1,4 +1,4 @@
-import { dbQuery, describeDbError } from "@/lib/databricks";
+import { dbQuery, describeDbError, HIDDEN_BRIEFING_PREDICATE } from "@/lib/databricks";
 import BriefingCard from "@/components/BriefingCard";
 
 // Time-based ISR. Netlify's Next.js runtime caches this page and revalidates
@@ -23,6 +23,7 @@ async function getLatestBriefings(): Promise<{ briefings: Briefing[]; error: str
       FROM (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY generated_at DESC) AS rn
         FROM company_briefings
+        WHERE ${HIDDEN_BRIEFING_PREDICATE}
       ) t
       WHERE rn = 1
       ORDER BY ticker ASC

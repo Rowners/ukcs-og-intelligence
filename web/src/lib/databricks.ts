@@ -8,6 +8,15 @@ function getClient() {
   return new DBSQLClient();
 }
 
+/**
+ * Serica Energy is off the digest. Rows stay in Databricks; queries omit them.
+ * SQZ is the stored ticker. SER is the later LSE TIDM, in case a row used it.
+ */
+export const HIDDEN_BRIEFING_PREDICATE = `
+  UPPER(ticker) NOT IN ('SQZ', 'SER')
+  AND UPPER(COALESCE(company_name, '')) NOT LIKE '%SERICA%'
+`;
+
 const REQUIRED_ENV = [
   "DATABRICKS_SERVER_HOSTNAME",
   "DATABRICKS_HTTP_PATH",

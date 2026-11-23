@@ -29,7 +29,6 @@ interface ProductionRow {
 const OPERATORS = [
   { label: "Harbour Energy", value: "HARBOUR ENERGY PLC" },
   { label: "EnQuest", value: "ENQUEST PLC" },
-  { label: "Serica Energy", value: "SERICA ENERGY" },
   { label: "Ithaca Energy", value: "ITHACA ENERGY" },
 ];
 
