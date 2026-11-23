@@ -129,10 +129,10 @@ DATABRICKS_SERVER_HOSTNAME=your-workspace.cloud.databricks.com
 DATABRICKS_HTTP_PATH=/sql/1.0/warehouses/your-warehouse-id
 DATABRICKS_ACCESS_TOKEN=your-personal-access-token
 OPENAI_API_KEY=sk-proj-...
-OPENAI_MODEL=gpt-4o
+OPENAI_MODEL=gpt-6.1-terra
 ```
 
-`gpt-4o` still serves the API and shuts down on 14 January 2027. Set `OPENAI_MODEL` to the current replacement before then. The same four names are GitHub Actions secrets (`OPENAI_MODEL` is optional). The web app does not use the OpenAI key.
+The briefing generator defaults to `gpt-6.1-terra` and does not send `temperature` for that model. `gpt-4o` still serves the API and shuts down on 14 January 2027. The same four names are GitHub Actions secrets (`OPENAI_MODEL` is optional and overrides the default). The web app does not use the OpenAI key.
 
 ### 3. Test connections
 
@@ -267,7 +267,7 @@ python -m src.intelligence.briefings --tickers ENQ SQZ --delay 15
 ## Notes
 
 - **Databricks Free Edition**: The SQL warehouse auto-pauses after inactivity. Start it manually before running scripts or allow a 2–5 minute cold-start delay on first connection.
-- **OpenAI rate limits**: The briefing generator waits 30 seconds between companies. Use `--delay` to adjust. `gpt-4o` shuts down on 14 January 2027; set `OPENAI_MODEL` before then.
+- **OpenAI rate limits**: The briefing generator waits 30 seconds between companies. Use `--delay` to adjust. The default model is `gpt-6.1-terra`. `gpt-4o` shuts down on 14 January 2027.
 - **NSTA production data**: The ArcGIS API returns multiple sub-unit rows per field per period. These are aggregated (summed) before upsert so each FIELDNAME + PERIODYR + PERIODMNTH combination is unique. Pages are followed while `exceededTransferLimit` is set (the service caps a page at 1000 rows).
 - **RNS**: The LSE search API returns the five most recent announcements per issuer. Serica is requested under TIDM SER and stored as SQZ.
 - **Price Analysis**: Live data is fetched server-side from Yahoo Finance's v8 chart API with a browser-like User-Agent. No API key required. Data is not cached — each page load makes fresh requests.

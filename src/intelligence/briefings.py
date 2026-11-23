@@ -1,5 +1,5 @@
 """
-Generate AI intelligence briefings for UKCS operators using GPT-4o.
+Generate AI intelligence briefings for UKCS operators.
 
 Context loaded per company:
   - Field production history (monthly, by field) from nsta_field_production_raw
@@ -23,10 +23,15 @@ from src.databricks.client import query, save_briefing
 
 logger = logging.getLogger(__name__)
 
-# gpt-4o still answers the API, but OpenAI has scheduled it to shut down on
-# 14 January 2027. Override with OPENAI_MODEL before that date.
-DEFAULT_MODEL = "gpt-4o"
+# Daily runs set OPENAI_MODEL. gpt-6.1-terra rejects any temperature other than
+# the default, so temperature is only sent for the gpt-4o / gpt-4.1 family.
+DEFAULT_MODEL = "gpt-6.1-terra"
 _GPT4O_SHUTDOWN = "2027-01-14"
+
+
+def _allows_custom_temperature(model: str) -> bool:
+    name = model.lower()
+    return name.startswith("gpt-4o") or name.startswith("gpt-4.1")
 
 # M3 to barrels conversion
 M3_TO_BBL = 6.2898
@@ -253,11 +258,13 @@ def generate_briefing(company: dict, year: int | None = None, model: str | None 
     if not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("Missing environment variable: OPENAI_API_KEY")
     client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=120.0, max_retries=1)
-    response = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0.3,
-    )
+    request: dict = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if _allows_custom_temperature(model):
+        request["temperature"] = 0.3
+    response = client.chat.completions.create(**request)
 
     briefing = response.choices[0].message.content.strip()
     save_briefing(ticker, company_name, year, briefing, model)
@@ -275,11 +282,12 @@ def run(tickers: list[str] | None = None, year: int | None = None, model: str | 
     import time
 
     model = _resolve_model(model)
-    if model == DEFAULT_MODEL:
+    if model.lower().startswith("gpt-4o"):
         logger.warning(
-            "OpenAI model %s shuts down on %s. Set OPENAI_MODEL to the replacement before then.",
+            "OpenAI model %s shuts down on %s. Set OPENAI_MODEL to %s before then.",
             model,
             _GPT4O_SHUTDOWN,
+            DEFAULT_MODEL,
         )
 
     companies = by_ticker(tickers)
