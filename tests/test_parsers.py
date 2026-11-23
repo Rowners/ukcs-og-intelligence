@@ -63,10 +63,11 @@ class MarketDataTests(unittest.TestCase):
         self.assertEqual(rows[0]["open"], 50.0)
         self.assertEqual(rows[0]["volume"], 5)
 
-    def test_serica_alias(self):
-        rows = by_ticker(["SER"])
-        self.assertEqual([c["ticker"] for c in rows], ["SQZ"])
-        self.assertEqual(rows[0]["yf_symbol"], "SER.L")
+    def test_serica_is_not_on_the_watchlist(self):
+        tickers = {c["ticker"] for c in by_ticker(None)}
+        self.assertEqual(tickers, {"HBR", "ENQ", "ITH"})
+        self.assertEqual(by_ticker(["SQZ"]), [])
+        self.assertEqual(by_ticker(["SER"]), [])
 
 
 class PaginationTests(unittest.TestCase):

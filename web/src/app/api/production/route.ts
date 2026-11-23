@@ -32,6 +32,10 @@ export async function GET(req: NextRequest) {
   const field = searchParams.get("field");
   const year = searchParams.get("year");
 
+  if (operator && operator.toUpperCase().includes("SERICA")) {
+    return NextResponse.json([]);
+  }
+
   try {
     let sql = `
       SELECT FIELDNAME, ORGGRPNM, PERIODYR, PERIODMNTH,

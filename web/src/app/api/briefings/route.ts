@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { dbQuery, describeDbError } from "@/lib/databricks";
+import { dbQuery, describeDbError, HIDDEN_BRIEFING_PREDICATE } from "@/lib/databricks";
 
 export interface Briefing {
   ticker: string;
@@ -18,11 +18,12 @@ export async function GET(req: NextRequest) {
     let sql = `
       SELECT ticker, company_name, year, briefing, generated_at, model
       FROM company_briefings
+      WHERE ${HIDDEN_BRIEFING_PREDICATE}
     `;
     const params: string[] = [];
 
     if (ticker) {
-      sql += " WHERE UPPER(ticker) = UPPER(?)";
+      sql += " AND UPPER(ticker) = UPPER(?)";
       params.push(ticker);
     }
 
