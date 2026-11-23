@@ -73,12 +73,15 @@ def test_openai():
 
     try:
         from openai import OpenAI
+
+        from src.intelligence.briefings import DEFAULT_MODEL
+
         client = OpenAI(api_key=os.environ["OPENAI_API_KEY"], timeout=30.0, max_retries=1)
-        model = os.environ.get("OPENAI_MODEL") or "gpt-4o"
+        model = os.environ.get("OPENAI_MODEL") or DEFAULT_MODEL
         response = client.chat.completions.create(
             model=model,
             messages=[{"role": "user", "content": "Reply with the single word: ok"}],
-            max_tokens=5,
+            max_completion_tokens=5,
         )
         reply = response.choices[0].message.content.strip()
         print(f"  OK — {model} responded: '{reply}'")
